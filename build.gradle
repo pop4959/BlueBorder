@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'org.popcraft'
+version = '1.0.0'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+    maven {
+        url 'https://jitpack.io'
+    }
+}
+
+dependencies {
+    compileOnly 'org.spigotmc:spigot-api:1.17.1-R0.1-SNAPSHOT'
+    compileOnly 'com.github.BlueMap-Minecraft:BlueMapAPI:v1.5.0'
+}
+
+processResources {
+    filesMatching("plugin.yml") {
+        expand 'projectVersion': project.version
+    }
+}

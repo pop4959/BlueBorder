@@ -1,0 +1,14 @@
+name: BlueBorder
+version: ${projectVersion}
+main: org.popcraft.blueborder.BlueBorder
+api-version: 1.17
+depend: [ BlueMap ]
+authors: [ pop4959 ]
+description: Displays the vanilla world border in BlueMap.
+commands:
+  blueborder:
+    permission: blueborder.command
+    description: Updates vanilla world border markers.
+permissions:
+  blueborder.command:
+    default: op
