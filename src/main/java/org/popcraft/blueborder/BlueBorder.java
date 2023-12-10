@@ -19,15 +19,21 @@ import java.util.List;
 public final class BlueBorder extends JavaPlugin {
     private static final String MARKER_SET_ID = "worldborder";
     private static final String LABEL = "World border";
+    private static final String DEFAULT_COLOR = "FF0000";
+    private Color color;
 
     @Override
     public void onEnable() {
+        getConfig().options().copyDefaults(true);
+        saveConfig();
+        reloadOptions();
         BlueMapAPI.onEnable(this::addWorldBorders);
         BlueMapAPI.onDisable(this::removeWorldBorders);
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        reloadOptions();
         BlueMapAPI.getInstance().ifPresent(this::removeWorldBorders);
         BlueMapAPI.getInstance().ifPresent(this::addWorldBorders);
         return true;
@@ -36,6 +42,11 @@ public final class BlueBorder extends JavaPlugin {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         return Collections.emptyList();
+    }
+
+    private void reloadOptions() {
+        reloadConfig();
+        color = new Color(Integer.parseInt(getConfig().getString("color", DEFAULT_COLOR).toLowerCase(), 16), 1f);
     }
 
     private void addWorldBorders(BlueMapAPI blueMapAPI) {
@@ -51,7 +62,7 @@ public final class BlueBorder extends JavaPlugin {
             final ShapeMarker marker = ShapeMarker.builder()
                     .label(LABEL)
                     .shape(border, world.getSeaLevel())
-                    .lineColor(new Color(0xFF0000, 1f))
+                    .lineColor(color)
                     .fillColor(new Color(0))
                     .lineWidth(3)
                     .depthTestEnabled(false)
