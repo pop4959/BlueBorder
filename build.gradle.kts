@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.popcraft"
-version = "1.1.1"
+version = "1.1.2"
 
 java {
     toolchain {
@@ -30,5 +30,5 @@ repositories {
 
 dependencies {
     compileOnly("org.spigotmc:spigot-api:1.20.4-R0.1-SNAPSHOT")
-    compileOnly("com.github.BlueMap-Minecraft:BlueMapAPI:v2.1.0")
+    compileOnly("com.github.BlueMap-Minecraft:BlueMapAPI:v2.7.0")
 }
