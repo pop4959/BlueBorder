@@ -18,9 +18,10 @@ import java.util.List;
 
 public final class BlueBorder extends JavaPlugin {
     private static final String MARKER_SET_ID = "worldborder";
-    private static final String LABEL = "World border";
+    private static final String DEFAULT_LABEL = "World border";
     private static final String DEFAULT_COLOR = "FF0000";
     private Color color;
+    private String label;
 
     @Override
     public void onEnable() {
@@ -47,11 +48,12 @@ public final class BlueBorder extends JavaPlugin {
     private void reloadOptions() {
         reloadConfig();
         color = new Color(Integer.parseInt(getConfig().getString("color", DEFAULT_COLOR).toLowerCase(), 16), 1f);
+        label = getConfig().getString("label", DEFAULT_LABEL);
     }
 
     private void addWorldBorders(BlueMapAPI blueMapAPI) {
         for (final World world : getServer().getWorlds()) {
-            final MarkerSet markerSet = MarkerSet.builder().label(LABEL).build();
+            final MarkerSet markerSet = MarkerSet.builder().label(label).build();
             final WorldBorder worldBorder = world.getWorldBorder();
             final double centerX = worldBorder.getCenter().getX();
             final double centerZ = worldBorder.getCenter().getZ();
@@ -60,7 +62,7 @@ public final class BlueBorder extends JavaPlugin {
             final Vector2d pos2 = new Vector2d(centerX + radius, centerZ + radius);
             final Shape border = Shape.createRect(pos1, pos2);
             final ShapeMarker marker = ShapeMarker.builder()
-                    .label(LABEL)
+                    .label(label)
                     .shape(border, world.getSeaLevel())
                     .lineColor(color)
                     .fillColor(new Color(0))
