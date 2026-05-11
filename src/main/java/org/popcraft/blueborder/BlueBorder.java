@@ -7,76 +7,126 @@ import de.bluecolored.bluemap.api.markers.MarkerSet;
 import de.bluecolored.bluemap.api.markers.ShapeMarker;
 import de.bluecolored.bluemap.api.math.Color;
 import de.bluecolored.bluemap.api.math.Shape;
-import org.bukkit.World;
-import org.bukkit.WorldBorder;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.plugin.java.JavaPlugin;
+import de.bluecolored.bluemap.api.plugin.Plugin;
+import de.bluecolored.bluemap.common.api.BlueMapWorldImpl;
+import de.bluecolored.bluemap.common.api.PluginImpl;
+import de.bluecolored.bluemap.core.world.World;
+import de.bluecolored.bluemap.core.world.mca.MCAWorld;
+import de.bluecolored.bluenbt.BlueNBT;
 
-import java.util.Collections;
-import java.util.List;
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.zip.GZIPInputStream;
 
-public final class BlueBorder extends JavaPlugin {
+public final class BlueBorder implements Runnable {
     private static final String MARKER_SET_ID = "worldborder";
-    private static final String DEFAULT_LABEL = "World border";
-    private static final String DEFAULT_COLOR = "FF0000";
-    private Color color;
-    private String label;
+
+    private static final BlueNBT nbt = new BlueNBT();
+
+    private Config config;
 
     @Override
-    public void onEnable() {
-        getConfig().options().copyDefaults(true);
-        saveConfig();
-        reloadOptions();
-        BlueMapAPI.onEnable(this::addWorldBorders);
-        BlueMapAPI.onDisable(this::removeWorldBorders);
+    public void run() {
+        BlueMapAPI.onEnable(this::onEnable);
+        // No need to remove anything onDisable, because all markers are removed when BlueMap disables, anyway.
+        // The onEnable simply puts it back.
     }
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        reloadOptions();
-        BlueMapAPI.getInstance().ifPresent(this::removeWorldBorders);
-        BlueMapAPI.getInstance().ifPresent(this::addWorldBorders);
-        return true;
-    }
+    public void onEnable(BlueMapAPI blueMapAPI) {
+        // Allow config reloads through `/bluemap reload`
+        try {
+            config = Config.load(blueMapAPI);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        return Collections.emptyList();
-    }
-
-    private void reloadOptions() {
-        reloadConfig();
-        color = new Color(Integer.parseInt(getConfig().getString("color", DEFAULT_COLOR).toLowerCase(), 16), 1f);
-        label = getConfig().getString("label", DEFAULT_LABEL);
+        addWorldBorders(blueMapAPI);
     }
 
     private void addWorldBorders(BlueMapAPI blueMapAPI) {
-        for (final World world : getServer().getWorlds()) {
-            final MarkerSet markerSet = MarkerSet.builder().label(label).build();
-            final WorldBorder worldBorder = world.getWorldBorder();
-            final double centerX = worldBorder.getCenter().getX();
-            final double centerZ = worldBorder.getCenter().getZ();
+        for (final BlueMapWorld world : blueMapAPI.getWorlds()) {
+            flushWorldUpdates(blueMapAPI, world);
+            final MarkerSet markerSet = MarkerSet.builder().label(config.getLabel()).build();
+            final WorldBorder worldBorder = getWorldBorder(world);
+            final double centerX = worldBorder.getX();
+            final double centerZ = worldBorder.getZ();
             final double radius = worldBorder.getSize() / 2d;
             final Vector2d pos1 = new Vector2d(centerX - radius, centerZ - radius);
             final Vector2d pos2 = new Vector2d(centerX + radius, centerZ + radius);
             final Shape border = Shape.createRect(pos1, pos2);
             final ShapeMarker marker = ShapeMarker.builder()
-                    .label(label)
-                    .shape(border, world.getSeaLevel())
-                    .lineColor(color)
+                    .label(config.getLabel())
+                    .shape(border, config.getHeight())
+                    .lineColor(config.getColor())
                     .fillColor(new Color(0))
                     .lineWidth(3)
                     .depthTestEnabled(false)
                     .build();
-            markerSet.getMarkers().put(world.getName(), marker);
-            blueMapAPI.getWorld(world.getName())
-                    .map(BlueMapWorld::getMaps)
-                    .ifPresent(maps -> maps.forEach(map -> map.getMarkerSets().put(MARKER_SET_ID, markerSet)));
+            markerSet.getMarkers().put(world.getId(), marker);
+            world.getMaps().forEach(map -> map.getMarkerSets().put(MARKER_SET_ID, markerSet));
         }
     }
 
-    private void removeWorldBorders(BlueMapAPI blueMapAPI) {
-        blueMapAPI.getMaps().forEach(map -> map.getMarkerSets().remove(MARKER_SET_ID));
+    private static WorldBorder getWorldBorder(BlueMapWorld world) {
+        final Path worldBorderFile = getWorldBorderFile(world);
+
+        try (
+                final InputStream in = Files.newInputStream(worldBorderFile);
+                final InputStream compressedIn = new BufferedInputStream(new GZIPInputStream(in))
+        ) {
+            return nbt.read(compressedIn, WorldBorder.class);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read world border data from " + worldBorderFile, e);
+        }
+    }
+
+    private static Path getWorldBorderFile(BlueMapWorld world) {
+        final Path saveFolder = getSaveFolder(world);
+        final Path worldBorderFile = saveFolder.resolve("data").resolve("minecraft").resolve("world_border.dat");
+        if (Files.exists(worldBorderFile)) {
+            return worldBorderFile;
+        }
+
+        final Path levelDatFile = saveFolder.resolve("level.dat");
+        if (Files.exists(levelDatFile)) {
+            return levelDatFile;
+        }
+
+        // on Bukkit, saveFolder() returns paths like `world_nether/DIM-1` for alternate dimensions, so we try the parent as well
+        final Path levelDatFileBukkitDimension = saveFolder.getParent().resolve("level.dat");
+        if (Files.exists(levelDatFileBukkitDimension)) {
+            return levelDatFileBukkitDimension;
+        }
+
+        throw new RuntimeException("World border file not found for world " + saveFolder);
+    }
+
+    // Inspired by https://github.com/BlueMap-Minecraft/BlueMap/blob/3092de2e2320fef2081ddb5e5f1040846a3103f9/common/src/main/java/de/bluecolored/bluemap/common/api/BlueMapWorldImpl.java#L60-L69
+    // But that method is deprecated, so we reimplement it here
+    private static Path getSaveFolder(BlueMapWorld apiWorld) {
+        BlueMapWorldImpl worldImpl = (BlueMapWorldImpl) apiWorld;
+        World world = worldImpl.world();
+        if (world instanceof MCAWorld mcaWorld) {
+            return mcaWorld.getDimensionFolder();
+        } else {
+            throw new UnsupportedOperationException("Unsupported world type: " + world.getClass().getName());
+        }
+    }
+
+    /// Ensure that the world_border.dat or level.dat file is flushed to disk, so it can be read.
+    /// This is important in case a user just changed the world border and reloaded BlueMap to see the changes on their map.
+    private static void flushWorldUpdates(BlueMapAPI api, BlueMapWorld apiWorld) {
+        Plugin plugin = api.getPlugin();
+        PluginImpl pluginImpl = (PluginImpl) plugin;
+        BlueMapWorldImpl worldImpl = (BlueMapWorldImpl) apiWorld;
+        World world = worldImpl.world();
+        try {
+            pluginImpl.getPlugin().flushWorldUpdates(world);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to flush world updates for " + world.getName(), e);
+        }
     }
 }
