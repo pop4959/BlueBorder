@@ -1,0 +1,5 @@
+{
+	"id": "${id}",
+	"entrypoint": "org.popcraft.blueborder.BlueBorder",
+	"version": "${version}"
+}
