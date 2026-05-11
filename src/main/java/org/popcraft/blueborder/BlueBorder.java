@@ -7,7 +7,9 @@ import de.bluecolored.bluemap.api.markers.MarkerSet;
 import de.bluecolored.bluemap.api.markers.ShapeMarker;
 import de.bluecolored.bluemap.api.math.Color;
 import de.bluecolored.bluemap.api.math.Shape;
+import de.bluecolored.bluemap.api.plugin.Plugin;
 import de.bluecolored.bluemap.common.api.BlueMapWorldImpl;
+import de.bluecolored.bluemap.common.api.PluginImpl;
 import de.bluecolored.bluemap.core.world.World;
 import de.bluecolored.bluemap.core.world.mca.MCAWorld;
 import de.bluecolored.bluenbt.BlueNBT;
@@ -46,6 +48,7 @@ public final class BlueBorder implements Runnable {
 
     private void addWorldBorders(BlueMapAPI blueMapAPI) {
         for (final BlueMapWorld world : blueMapAPI.getWorlds()) {
+            flushWorldUpdates(blueMapAPI, world);
             final MarkerSet markerSet = MarkerSet.builder().label(config.getLabel()).build();
             final WorldBorder worldBorder = getWorldBorder(world);
             final double centerX = worldBorder.getX();
@@ -110,6 +113,20 @@ public final class BlueBorder implements Runnable {
             return mcaWorld.getDimensionFolder();
         } else {
             throw new UnsupportedOperationException("Unsupported world type: " + world.getClass().getName());
+        }
+    }
+
+    /// Ensure that the world_border.dat or level.dat file is flushed to disk, so it can be read.
+    /// This is important in case a user just changed the world border and reloaded BlueMap to see the changes on their map.
+    private static void flushWorldUpdates(BlueMapAPI api, BlueMapWorld apiWorld) {
+        Plugin plugin = api.getPlugin();
+        PluginImpl pluginImpl = (PluginImpl) plugin;
+        BlueMapWorldImpl worldImpl = (BlueMapWorldImpl) apiWorld;
+        World world = worldImpl.world();
+        try {
+            pluginImpl.getPlugin().flushWorldUpdates(world);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to flush world updates for " + world.getName(), e);
         }
     }
 }
